@@ -5,96 +5,141 @@
 <title>코드 스피츠 예제1</title>
 </head>
 <body>
-   <section id="data"></section>
+    <section id="data"></section>
 <script>
-   const Info = class{
-       constructor(json) {
-           const [title, header, items] = json;
 
-           if(!title || typeof title != 'string') throw 'invalid title';
-           if(!Array.isArray(header) || !header.length) throw 'invalid header';
-           if(!Array.isArray(items) || !items.length) throw 'invalid items';
+    const Info = class{
+        constructor(json) {
+            const {title, header, items} = json;
+            const getOrdinalNumber = number => {
+                if(!Number.isInteger(number)) throw 'unvalid number';
+                return number + (
+                    number % 10 === 1 && number !== 11 ? 'st' 
+                    : number % 10 === 2 && number !== 12 ? 'nd' 
+                    : number % 10 === 3 && number !== 13 ? 'rd' : 'th');
+            }
 
-           this._private = {title, header, items};
-       }
-       get title() {return this._private.title;}
-       get header() {return this._private.header;}
-       get items() {return this._private.items;}
-   };
+            if(!title || typeof title != 'string') throw 'invalid title';
+            if(!Array.isArray(header) || !header.length) throw 'invalid header';
+            if(!Array.isArray(items) || !items.length) throw 'invalid items';
 
-   const Data = class{
-       async getData (){
-           const json = await this._getData();
-           return new Info(json);
-       }
-       async _getData(){
-           throw "_ getData must overrided ";
-       }
-   };
-   const JsonData = class extends Data{
-       constructor(data){
-           super();
-           this._data = data;
-       }
-       async _getData(){
-           let json ;
-           if( typeof this._data == 'string'){
-               const response = await fetch( this._data );
-               return await response.json();
-           }else return this._data ;
-       }
-   };
-   const Renderer = class{
-       constructor(){}
-       async render(data, {title='title', header='header', items='items'}){
-           if(!(data instanceof Data)) throw "invalid data type";
-           this._info = await data.getData({title, header, items});
-           this._render();
-       }
+            items.forEach((datas, index)=>{ 
+                if(!Array.isArray(datas) || datas.length !== header.length) 
+                    throw `not matched ${getOrdinalNumber(index + 1)} item length(${datas.length}) and header length(${header.length}).`; 
+            });
 
-       _render() {
-           throw '_render must overrided';
-       }
-   }
+            this._private = {title, header, items};
+        }
 
-   const TableRenderer = class extends Renderer{
-       constructor(parent){
-           if(typeof parent != 'string' || !parent) throw 'invalid param';
-           super();
-           this._parent = parent;
-       }
+        get title() {return this._private.title;}
+        get header() {return this._private.header;}
+        get items() {return this._private.items;}
+    };
 
-       _render() {
-           const parent = document.querySelector(this._parent);
-           if(!parent) throw 'invalid parent';
-           parent.innerHTML = '';
-           const [table, caption] = 'table,caption'.split(',').map(v=>document.createElement(v));
-           caption.innerHTML = this._info.title;
-           table.appendChild(caption);
-           table.appendChild(
-               this._info.header.reduce(
-                   (thead, data)=>(thead.appendChild(document.createElement('th')).innerHTML = data, thead),
-                   document.createElement('thead')
-               )
-           );
+    const Data = class{
+        async getData() {
+            const json = await this._getData();
+            return new Info(json);
+        }
 
-           parent.appendChild(
-               this._info.items.reduce(
-                   (table, row) => (table.appendChild(
-                       row.reduce(
-                           (tr, data) => (tr.appendChild(document.createElement('td')).innerHTML = data, tr),
-                           document.createElement('tr')
-                       )
-                   ), table)
-               , table)
-           );
-       }
-   }    
+        async _getData() { throw '_getData must override!!'; }
+    };
 
-   const data = new JsonData('71_1.json');
-   const renderer = new TableRenderer('#data');
-   renderer.render(data);
-   
+    const JsonData = class extends Data{
+
+        constructor(data) {
+            super();
+            this._data = data;
+        }
+
+        async _getData() {
+            if (typeof this._data == 'string') {
+                const response = await fetch(this._data);
+                if (!response.ok) throw 'fetch error';
+                return await response.json();
+            } else return this._data;
+        }
+    };
+
+
+    const Renderer = class{
+        constructor() {
+            this._mapper = {
+                title: 'title',
+                items: 'items',
+                header: 'header'
+            };
+        }
+        async render(data) {
+            if (!(data instanceof Data)) throw 'invalid info type';
+            
+            const info = await data.getData();
+
+            this.data = {
+                title: info[this._mapper.title],
+                items: info[this._mapper.items],
+                header: info[this._mapper.header]
+            };;
+            this._render();
+        }
+
+        _render() { throw '_render must override';  }
+    };
+
+    const TableRenderer = class extends Renderer{
+        constructor(parent){
+            if (typeof parent != 'string' || !parent) throw 'invalid param';
+            super();
+            this._private = {parent};
+        }
+        _render(){
+
+            const parent = document.querySelector(this._private.parent);
+
+            if (!parent) throw '부모 객체가 존재하지 않습니다.';
+
+            const {title, header, items} = this.data;
+
+            parent.innerHTML = '';
+
+            const [table, caption, thead] = 'table,caption,thead'.split(',').map(v=>document.createElement(v));
+
+            caption.innerText = title;
+            table.appendChild(caption);
+
+            thead.appendChild(
+                header.reduce((tr, data) => {
+                    const th = document.createElement('th');
+                    th.innerText = data;
+                    tr.appendChild(th);
+
+                    return tr;
+                }, document.createElement('tr'))
+            );
+
+            table.appendChild(thead);
+
+            table.appendChild(
+                items.reduce((tbody, datas) => {
+                    tbody.appendChild(
+                        datas.reduce((tr, data) => {
+                            const td = document.createElement('td');
+                            td.innerText = data;
+                            tr.appendChild(td);
+                            return tr;
+                        }, document.createElement('tr'))
+                    );
+                    return tbody;
+                }, document.createElement('tbody'))
+            );
+
+            parent.appendChild(table);
+        }
+    };
+
+    const data = new JsonData('71_1.json');
+    const renderer = new TableRenderer('#data');
+    renderer.render(data);    
 </script>
 </body>
 </html>
